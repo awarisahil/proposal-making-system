@@ -1,0 +1,410 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ProposalStatus {
+  DRAFT
+  INTERNAL_REVIEW
+  APPROVED
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum ProposalCurrency {
+  INR
+  USD
+  EUR
+  GBP
+}
+
+enum ProposalItemType {
+  PRODUCT
+  CUSTOM
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum ProposalVersionStatus {
+  DRAFT
+  FINAL
+  SUPERSEDED
+}
+
+model Organization {
+  id     String             @id @default(uuid())
+  name   String
+  slug   String             @unique
+  status OrganizationStatus @default(ACTIVE)
+
+  logoUrl String?
+  email   String?
+  phone   String?
+  website String?
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String?
+
+  primaryColor   String? @default("#1F4E79")
+  secondaryColor String? @default("#6B7280")
+
+  proposals         Proposal[]
+  users             User[]
+  clients           Client[]
+  roles             Role[]
+  productCategories ProductCategory[]
+  products          Product[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([status])
+}
+
+model User {
+  id             String @id @default(uuid())
+  organizationId String
+
+  firstName    String
+  lastName     String
+  email        String
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roles         UserRole[]
+  refreshTokens RefreshToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([email])
+  @@index([organizationId])
+}
+
+model Role {
+  id             String @id @default(uuid())
+  organizationId String
+
+  name        String
+  description String?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        UserRole[]
+  permissions  RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Permission {
+  id String @id @default(uuid())
+
+  name        String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model RefreshToken {
+  id     String @id @default(uuid())
+  userId String
+
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Client {
+  id             String @id @default(uuid())
+  organizationId String
+
+  companyName String
+  displayName String?
+  email       String?
+  phone       String?
+  website     String?
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  country      String?
+  postalCode   String?
+
+  notes String?
+
+  status ClientStatus @default(ACTIVE)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts     ClientContact[]
+  proposals    Proposal[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, companyName])
+  @@index([organizationId, status])
+}
+
+model ClientContact {
+  id       String @id @default(uuid())
+  clientId String
+
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  designation String?
+  isPrimary   Boolean @default(false)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([clientId, email])
+}
+
+model ProductCategory {
+  id             String @id @default(uuid())
+  organizationId String
+
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products     Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, name])
+}
+
+model Product {
+  id             String  @id @default(uuid())
+  organizationId String
+  categoryId     String?
+
+  name        String
+  sku         String?
+  description String?
+
+  unit String @default("unit")
+
+  price   Decimal @db.Decimal(12, 2)
+  taxRate Decimal @default(0) @db.Decimal(5, 2)
+
+  isActive Boolean @default(true)
+
+  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category      ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  proposalItems ProposalItem[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, categoryId])
+  @@index([organizationId, name])
+  @@index([organizationId, sku])
+}
+
+model Proposal {
+  id             String @id @default(uuid())
+  organizationId String
+  clientId       String
+
+  proposalNumber String
+  title          String
+  description    String?
+
+  status   ProposalStatus   @default(DRAFT)
+  currency ProposalCurrency @default(INR)
+
+  validUntil DateTime?
+
+  subtotal Decimal @default(0) @db.Decimal(14, 2)
+  discount Decimal @default(0) @db.Decimal(14, 2)
+  tax      Decimal @default(0) @db.Decimal(14, 2)
+  total    Decimal @default(0) @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  sections   ProposalSection[]
+  items      ProposalItem[]
+  versions   ProposalVersion[]
+  activities ProposalActivity[]
+
+  @@unique([organizationId, proposalNumber])
+  @@index([organizationId])
+  @@index([organizationId, clientId])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+model ProposalSection {
+  id         String @id @default(uuid())
+  proposalId String
+
+  title     String
+  content   String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+  @@index([proposalId, sortOrder])
+}
+
+model ProposalItem {
+  id         String  @id @default(uuid())
+  proposalId String
+  productId  String?
+
+  type ProposalItemType @default(PRODUCT)
+
+  name        String
+  description String?
+
+  quantity  Decimal @default(1) @db.Decimal(12, 2)
+  unit      String  @default("unit")
+  unitPrice Decimal @default(0) @db.Decimal(14, 2)
+
+  discountType  DiscountType @default(PERCENTAGE)
+  discountValue Decimal      @default(0) @db.Decimal(14, 2)
+
+  taxRate Decimal @default(0) @db.Decimal(5, 2)
+
+  subtotal  Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount Decimal @default(0) @db.Decimal(14, 2)
+  total     Decimal @default(0) @db.Decimal(14, 2)
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  product  Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([proposalId])
+  @@index([proposalId, sortOrder])
+  @@index([productId])
+}
+
+model ProposalVersion {
+  id         String @id @default(uuid())
+  proposalId String
+
+  version  Int
+  status   ProposalVersionStatus @default(DRAFT)
+  snapshot Json
+
+  createdBy String
+  createdAt DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, version])
+  @@index([proposalId])
+}
+
+model ProposalActivity {
+  id         String @id @default(uuid())
+  proposalId String
+
+  action      String
+  description String?
+
+  userId String?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+  @@index([proposalId, createdAt])
+}
