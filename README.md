@@ -212,6 +212,10 @@ Example:
 
 ```env
 PORT=5000
+
+
+
+
 NODE_ENV=development
 DATABASE_URL="your-postgresql-connection-string"
 ```
